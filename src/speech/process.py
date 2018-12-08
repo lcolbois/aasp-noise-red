@@ -33,11 +33,25 @@ def lpc_analysis(s,p):
     padded_s = np.concatenate((np.zeros(p),s))
     g2 = 0
     for n in range(0,N):
-        g2 = g2 + (padded_s[n+p] - a@np.flip(padded_s[n:n+p],0))**2
+            g2 = g2 + (padded_s[n+p] - a@np.flip(padded_s[n:n+p],0))**2
     g = np.sqrt(1/N*g2)
+
     return a,g
 
-def speech_PSD(a,g,omega):
+from scipy import integrate
+def squared_gain(a,noise_PSD, y):
+    N = y.shape[0]
+    def integrand(omega):
+        k = np.arange(a.shape[0])
+        return 1/np.abs(1-a@np.exp(-1j*k*omega))**2
+    vec_integrand = np.vectorize(integrand)
+    omega = np.linspace(-np.pi,np.pi,100)
+    integral = integrate.trapz(vec_integrand(omega),omega)
+    signal_energy = np.sum(y**2)
+    g2 = (2*np.pi/N*signal_energy - 2*np.pi*noise_PSD)/integral
+    return g2
+
+def speech_PSD(a,g2,omega):
     """ Use the provided LPC coefficients to build an estimate
         of the corresponding speech PSD (power spectral density).
         Return its evaluation at the normalized frequencies contained
@@ -45,7 +59,7 @@ def speech_PSD(a,g,omega):
     """
     def scalar_PSD(omega):
         k = np.arange(a.shape[0])
-        return g**2/(np.abs(1-a@np.exp(-1j*k*omega)))**2
+        return g2/(np.abs(1-a@np.exp(-1j*k*omega)))**2
     vec_PSD = np.vectorize(scalar_PSD)
     return vec_PSD(omega)
 
@@ -56,21 +70,17 @@ def wiener_filtering(signal_dft, speech_PSD, noise_PSD):
     transfer = speech_PSD/(speech_PSD + noise_PSD)
     return transfer*signal_dft
 
-def denoise_frame(x,p,sr,iterations):
+def denoise_frame(x,p,noise_PSD,sr,iterations):
     """Denoise a frame in the STFT domain by applying iterative Wiener filtering
     and approximating the PSD of the signal through the use of the all-pole model
     """
-    noise_PSD = 9e-4
-    #For now : estimator of PSD of the noise. Should be implemented with more care to improve results
-    #For gaussian noise : P_n = sigma_n^2
-
     dft = np.fft.rfft(x) #
     omega = np.linspace(0,np.pi,len(dft))
-
     # First signal iterant is the original (noisy) signal
-    x_i = x
+    s_i = x
     for it in range(iterations):
-        a,g = lpc_analysis(x_i,p) # Compute the coefficients of the all-pole filter from the current iterant
-        filtered_dft = wiener_filtering(dft,speech_PSD(a,g,omega),noise_PSD)
-        x_i = np.fft.irfft(filtered_dft)
-    return x_i
+        a,_ = lpc_analysis(s_i,p) # Compute the coefficients of the all-pole filter from the current iterant
+        g2 = squared_gain(a,noise_PSD,x)
+        filtered_dft = wiener_filtering(dft,speech_PSD(a,g2,omega),noise_PSD)
+        s_i = np.fft.irfft(filtered_dft)
+    return s_i
