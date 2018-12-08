@@ -7,10 +7,10 @@ def load(filename):
         Normalize it and return (signal, sampling rate)
     """
     sr, s = wavfile.read(filename)
-    s = s/np.max(s)
+    s = s/np.std(s)
     return s, sr
 
-def add_noise(x,SNR):
+def add_white_noise(x,SNR):
     """ Takes signal x and add white Gaussian noise to it to reach
         target SNR (in dB)
     """
@@ -18,6 +18,23 @@ def add_noise(x,SNR):
     noise_variance = Ps*10**(-SNR/10)
     noise = np.sqrt(noise_variance)*np.random.randn(len(x))
     return x+noise
+
+def add_noise_from_file(speech,sr_speech,noise_path,SNR):
+    noise_raw,sr_noise = load(noise_path)
+    noise_raw = noise_raw/np.max(noise_raw)
+    noise_part = noise_raw[:int(np.ceil(len(speech)*sr_noise/sr_speech))]
+    noise_resampled = sig.resample(noise_part,int(np.ceil(len(noise_part)*sr_speech/sr_noise)))
+    noise = noise_resampled[:len(speech)]
+
+    Ps = np.sum(speech**2)
+    print(Ps)
+    Pn = np.sum(noise**2)
+    print(Pn)
+    target_Pn = Ps/(10**(SNR/10))
+    print(target_Pn)
+    noise_corrected = noise*np.sqrt(target_Pn/Pn)
+    print(np.sum(noise_corrected**2))
+    return speech + noise_corrected
 
 def frame_split(x,frame_size):
     """ Takes signal x and split it in frames of size frame_size
