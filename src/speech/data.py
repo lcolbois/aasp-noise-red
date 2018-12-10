@@ -21,22 +21,17 @@ def add_white_noise(x,SNR):
 
 def add_noise_from_file(speech,sr_speech,noise_path,SNR):
     noise_raw,sr_noise = load(noise_path)
-    noise_raw = noise_raw/np.max(noise_raw)
-    noise_part = noise_raw[:int(np.ceil(len(speech)*sr_noise/sr_speech))]
-    noise_resampled = sig.resample(noise_part,int(np.ceil(len(noise_part)*sr_speech/sr_noise)))
-    noise = noise_resampled[:len(speech)]
+    noise_part = noise_raw[:int(np.ceil(len(speech)*sr_noise/sr_speech))] # Keep only what will remain after resampling
+    noise_resampled = sig.resample(noise_part,int(np.ceil(len(noise_part)*sr_speech/sr_noise))) # Resample to speech sampling rate
+    noise = noise_resampled[:len(speech)] # Remove possible useless samples due to rounding approximations
 
     Ps = np.sum(speech**2)
-    print(Ps)
     Pn = np.sum(noise**2)
-    print(Pn)
     target_Pn = Ps/(10**(SNR/10))
-    print(target_Pn)
     noise_corrected = noise*np.sqrt(target_Pn/Pn)
-    print(np.sum(noise_corrected**2))
     return speech + noise_corrected
 
-def frame_split(x,frame_size):
+def frame_split(x,frame_size, with_overlap = True):
     """ Takes signal x and split it in frames of size frame_size
         with overlap 50% and cosine analysis and synthesis windows
 
@@ -46,10 +41,15 @@ def frame_split(x,frame_size):
     """
     # Overlap : the choice of analysis and synthesis windows is as in the STFT course
     # Careful that it is only consistent for a 50% overlap
-    overlap_ratio = 0.5
-    overlap = int(overlap_ratio*frame_size)
-    w_a = sig.windows.cosine(frame_size)
-    w_s = sig.windows.cosine(frame_size)
+    if(with_overlap):
+        overlap_ratio = 0.5
+        overlap = int(overlap_ratio*frame_size)
+        w_a = sig.windows.cosine(frame_size)
+        w_s = sig.windows.cosine(frame_size)
+    else:
+        overlap = 0
+        w_a = np.ones(frame_size)
+        w_s = np.ones(frame_size)
 
     # Compute the number of frames and pad the input signal at the end with zeros
     # to work only with full frames
