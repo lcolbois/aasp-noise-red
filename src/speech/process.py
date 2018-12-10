@@ -84,3 +84,9 @@ def denoise_frame(x,p,noise_PSD,sr,iterations):
         filtered_dft = wiener_filtering(dft,speech_PSD(a,g2,omega),noise_PSD)
         s_i = np.fft.irfft(filtered_dft)
     return s_i
+
+def lowpass_filter(s,sr,fmax):
+    S = np.fft.rfft(s)
+    freq = np.linspace(0,sr,len(s)//2+1)
+    H = (freq <= fmax).astype(float)
+    return np.fft.irfft(H*S)
