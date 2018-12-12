@@ -148,7 +148,7 @@ def frame_nrj(x):
         subband_nrj : energy contained in the subband of relevant voice frequencies
     """
     NFFT = 128
-    X = np.fftshift(np.fft.fft(x,n=NFFT)
+    X = np.fftshift(np.fft.fft(x,n=NFFT))
     X = X[int(NFFT/2):]
     fullband_nrj = np.sum(np.abs(X)**2/NFFT)
     subband_nrj = np.sum(np.abs(X[1:4])**2/N)
