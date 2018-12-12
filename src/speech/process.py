@@ -86,7 +86,7 @@ def speech_PSD(a,g2,size):
         size : Requested size of the output array
 
     """
-    omega = np.linspace(0,pi,size)
+    omega = np.linspace(0,np.pi,size)
     def scalar_PSD(omega):
         k = np.arange(a.shape[0])
         return g2/(np.abs(1-a@np.exp(-1j*k*omega)))**2
@@ -108,7 +108,7 @@ def wiener_filtering(signal_dft, speech_PSD, noise_PSD):
     """
     transfer = speech_PSD/(speech_PSD + noise_PSD)
     filtered = transfer*signal_dft
-    return filtered
+    return filtered, transfer
 
 def denoise_frame(x,p,noise_PSD,iterations):
     """Denoise a frame in the STFT domain by applying iterative Wiener filtering
@@ -129,9 +129,9 @@ def denoise_frame(x,p,noise_PSD,iterations):
     for it in range(iterations):
         a,_ = lpc_analysis(s_i,p) # Compute the coefficients of the all-pole filter from the current iterant
         g2 = squared_gain(a,noise_PSD,x)
-        filtered_dft = wiener_filtering(dft,speech_PSD(a,g2,len(dft)),noise_PSD)
+        filtered_dft,transfer = wiener_filtering(dft,speech_PSD(a,g2,len(dft)),noise_PSD)
         s_i = np.fft.irfft(filtered_dft)
-    return s_i
+    return s_i, transfer
 
 def lowpass_filter(s,sr,fmax):
     S = np.fft.rfft(s)
@@ -148,8 +148,8 @@ def frame_nrj(x):
         subband_nrj : energy contained in the subband of relevant voice frequencies
     """
     NFFT = 128
-    X = np.fftshift(np.fft.fft(x,n=NFFT))
+    X = np.fft.fftshift(np.fft.fft(x,n=NFFT))
     X = X[int(NFFT/2):]
     fullband_nrj = np.sum(np.abs(X)**2/NFFT)
-    subband_nrj = np.sum(np.abs(X[1:4])**2/N)
+    subband_nrj = np.sum(np.abs(X[1:4])**2/NFFT)
     return fullband_nrj, subband_nrj
