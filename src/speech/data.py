@@ -10,13 +10,14 @@ def load(filename):
     s = s/np.std(s)
     return s, sr
 
-def add_white_noise(x,SNR):
+def add_white_noise(x,SNR,seed=0):
     """ Takes signal x and add white Gaussian noise to it to reach
         target SNR (in dB)
     """
+    np.random.seed(seed)
     Ps=np.sum(x**2)
-    noise_variance = Ps*10**(-SNR/10)
-    noise = np.sqrt(noise_variance)*np.random.randn(len(x))
+    noise_variance =  Ps/(10**(SNR/10))
+    noise = np.sqrt(noise_variance/len(x))*np.random.randn(len(x))
     return x+noise
 
 def add_noise_from_file(speech,sr_speech,noise_path,SNR):
@@ -59,6 +60,6 @@ def frame_split(x,frame_size, with_overlap = True):
     x_padded = np.concatenate((x,np.zeros(padded_size-len(x))))
 
 
-    list_frames = [[frame*(frame_size-overlap),frame*(frame_size-overlap)+frame_size] for frame in range(nframes)]
+    list_frames = [slice(frame*(frame_size-overlap),frame*(frame_size-overlap)+frame_size) for frame in range(nframes)]
 
     return list_frames, x_padded, w_a, w_s
