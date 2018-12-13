@@ -14,7 +14,7 @@ def autocorrelation(s,k):
     elif(k>=N):
         raise ValueError("k should be smaller than the signal length")
     else:
-        return s[k:N-1]@s[0:N-1-k]
+        return s[k:N]@s[0:N-k]
 
 
 def lpc_analysis(s,p):
@@ -69,9 +69,9 @@ def squared_gain(a,noise_PSD, y):
     vec_integrand = np.vectorize(integrand)
     omega = np.linspace(-np.pi,np.pi,100)
     integral = integrate.trapz(vec_integrand(omega),omega)
-    signal_energy = np.sum(y**2)
+    signal_power = np.sum(y**2)
     # The speech power is the total power minus the noise power
-    g2 = (2*np.pi/N*signal_energy - 2*np.pi*noise_PSD)/integral
+    g2 = (2*np.pi/N*signal_power - 2*np.pi*noise_PSD)/integral
     return g2
 
 def speech_PSD(a,g2,size):
@@ -131,7 +131,7 @@ def denoise_frame(x,p,noise_PSD,iterations):
         g2 = squared_gain(a,noise_PSD,x)
         filtered_dft,transfer = wiener_filtering(dft,speech_PSD(a,g2,len(dft)),noise_PSD)
         s_i = np.fft.irfft(filtered_dft)
-    return s_i, transfer
+    return s_i, transfer, speech_PSD(a,g2,len(dft)), noise_PSD
 
 def lowpass_filter(s,sr,fmax):
     S = np.fft.rfft(s)
