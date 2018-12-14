@@ -1,4 +1,5 @@
 import numpy as np
+import speech as sp
 def autocorrelation(s,k):
     """Compute the autocorrelation of signal s at lag k, used in both the LHS
     and the RHS of the linear system that must be solved when computing
@@ -131,6 +132,7 @@ def denoise_frame(x,p,noise_PSD,iterations):
         g2 = squared_gain(a,noise_PSD,x)
         filtered_dft,transfer = wiener_filtering(dft,speech_PSD(a,g2,len(dft)),noise_PSD)
         s_i = np.fft.irfft(filtered_dft)
+
     return s_i, transfer, speech_PSD(a,g2,len(dft)), noise_PSD
 
 def lowpass_filter(s,sr,fmax):
@@ -153,3 +155,23 @@ def frame_nrj(x):
     fullband_nrj = np.sum(np.abs(X)**2/NFFT)
     subband_nrj = np.sum(np.abs(X[1:4])**2/NFFT)
     return fullband_nrj, subband_nrj
+
+def denoise(y,frame_size,p,iterations):
+    # Get the list of frames for the STFT filtering
+    list_frames,y_padded,w_a,w_s = sp.data.frame_split(y,frame_size)
+    n_frames = len(list_frames)
+
+    wiener_filter = np.zeros(int(frame_size//2)+1)
+    s = np.zeros(y_padded.shape)
+    noise_PSD = np.var(w_a*y_padded[:frame_size])
+
+    for frame in range(n_frames):
+        idx = list_frames[frame]
+        if(np.sum((w_a*y_padded[idx])**2) > frame_size*noise_PSD):
+            denoised,wiener_filter,_,_ = sp.process.denoise_frame(w_a*y_padded[idx],p,noise_PSD,iterations)
+            s[idx] = s[idx] + w_s*denoised
+        else:
+            s[idx] = s[idx] + w_s*(np.fft.irfft(wiener_filter*np.fft.rfft(w_a*y_padded[idx])))
+
+    s = s/np.std(s)
+    return s[:len(y)]
