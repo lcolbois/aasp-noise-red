@@ -1,51 +1,256 @@
+import os, tarfile, bz2, requests, gzip 
+from scipy.io import wavfile
 import numpy as np
+import pyroomacoustics as pra
 
-def autocorrelation(s,k):
-    """Compute the autocorrelation of signal s at lag k, used in both the LHS
-    and the RHS of the linear system that must be solved when computing
-    the filter parameters"""
-    N = len(s)
-    if(k < 0):
-        raise ValueError("k should be positive")
-    elif(k>=N):
-        raise ValueError("k should be smaller than the signal length")
-    else:
-        return s[k:N-1]@s[0:N-1-k]
+def download_uncompress_tar_bz2(url, path='.'):
+
+    # open the stream
+    r = requests.get(url, stream=True)
+
+    tmp_file = 'temp_file.tar'  
+
+    # Download and uncompress at the same time.
+    chunk_size = 4 * 1024 * 1024  # wait for chunks of 4MB
+    with open(tmp_file, 'wb') as file:
+        decompress = bz2.BZ2Decompressor()
+        for chunk in r.iter_content(chunk_size=chunk_size):
+            file.write(decompress.decompress(chunk))
+
+    # finally untar the file to final destination
+    tf = tarfile.open(tmp_file)
+    tf.extractall(path)
+
+    # remove the temporary file
+    os.unlink(tmp_file)
 
 
-def compute_parameters(s,p):
-    """Compute the parameters a_k of the p-order all-pole filter by solving the linear system obtained by MAP with
-    observed signal s. Following case 2 from the article"""
-    from scipy.linalg import solve, toeplitz
-    N = len(s)
+def download_uncompress_tar_gz(url, path='.', chunk_size=None):
 
-    # Efficient building of the linear system by using the fact that A is a symmetric toeplitz, and its diagonals, as well
-    # as the RHS, just contain the autocorrelation of s for various intervals
-    # 1. Compute autocorrelations
-    R = np.zeros(p+1)
-    for k in range(len(R)):
-        R[k] = autocorrelation(s,k)
-    # 2. Build LHS, RHS and solve
-    A = toeplitz(R[0:p])
-    b = R[1:p+1]
-    a = solve(A,b)
+    tmp_file = 'tmp.tar.gz'
+    if chunk_size is None:
+        chunk_size = 4 * 1024 * 1024
 
-    # 3. Compute the gain factor for the excitation. Pad s with p zeros at the beginning (assumption on the S_I)
-    padded_s = np.concatenate((np.zeros(p),s))
-    g2 = 0
-    for n in range(0,N):
-        g2 = g2 + (padded_s[n+p] - a@np.flip(padded_s[n:n+p],0))**2
-    g = np.sqrt(1/N*g2)
-    return a,g
+    # stream the data
+    r = requests.get(url, stream=True)
+    with open(tmp_file, 'wb') as f:
+        content_length = int(r.headers['content-length'])
+        count = 0
+        for chunk in r.iter_content(chunk_size=chunk_size):
+            f.write(chunk)
+            count += 1
+            print("%d bytes out of %d downloaded" % 
+                (count*chunk_size, content_length))
+    r.close()
 
-def process_frame(s_frame,p):
-    """Analyses frame s to compute the coefficients of a p-th order all pole filter, and return the synthesized frame
-    obtained by filtering a random gaussian signal with this filter"""
-    frame_size = s_frame.shape[0]
-    a,g = compute_parameters(s_frame,p)
+    # uncompress
+    tar_file = 'tmp.tar'
+    with open(tar_file, "wb") as f_u:
+        with gzip.open(tmp_file, "rb") as f_c:
+            f_u.write(f_c.read())
 
-    y_padded_frame = np.zeros(p+frame_size) #Pad y with p zeros at the beginning
-    w = np.random.randn(frame_size) # Excitation : centered gaussian (valid for unvoiced speech)
-    for n in range(frame_size):
-        y_padded_frame[n+p] = a@np.flip(y_padded_frame[n:n+p],0)+g*w[n] # Synthetize signal using the filter + the excitation
-    return y_padded_frame[p:frame_size+p]
+    # finally untar the file to final destination
+    tf = tarfile.open(tar_file)
+
+    if not os.path.exists(path):
+        os.makedirs(path)
+    tf.extractall(path)
+
+    # remove the temporary file
+    os.unlink(tmp_file)
+    os.unlink(tar_file)
+
+
+
+def modify_input_wav(wav,noise,room_dim,max_order,snr_vals,mic_pos):
+
+    '''
+    for mono
+    '''
+
+    fs_s, audio_anechoic = wavfile.read(wav)
+    fs_n, noise_anechoic = wavfile.read(noise)
+    
+    #Create a room for the signal
+    room_signal= pra.ShoeBox(
+        room_dim,
+        absorption = 0.2,
+        fs = fs_s,
+        max_order = max_order)
+
+    #rCeate a room for the noise
+    room_noise = pra.ShoeBox(
+        room_dim,
+        absorption=0.2,
+        fs=fs_n,
+        max_order = max_order)
+
+    #source of the signal and of the noise in their respectiv boxes
+    room_signal.add_source([2,3.1,2],signal=audio_anechoic)
+    room_noise.add_source([4,2,1.5], signal=noise_anechoic)
+
+    #we add a microphone at the same position in both of the boxes
+    room_signal.add_microphone_array(
+        pra.MicrophoneArray(
+            mic_pos.T, 
+            room_signal.fs)
+        )
+    room_noise.add_microphone_array(
+        pra.MicrophoneArray(
+            mic_pos.T, 
+            room_noise.fs)
+        )
+
+    #simulate both rooms
+    room_signal.simulate()
+    room_noise.simulate()
+
+    #take the mic_array.signals from each room
+    audio_reverb = room_signal.mic_array.signals
+    noise_reverb = room_noise.mic_array.signals
+
+    #verify the size of the two arrays such that we can continue working on the signal
+    if(len(noise_reverb[0]) < len(audio_reverb[0])):
+        raise ValueError('the length of the noise signal is inferior to the one of the audio signal !!')
+
+    #normalize the noise_reverb
+    noise_reverb = noise_reverb[0,:len(audio_reverb[0])]
+    noise_normalized = noise_reverb/np.linalg.norm(noise_reverb)
+
+    #initialize the noiy_signal
+    noisy_signal = {}
+
+    #for each snr values create a noisy_signal for the labelling function
+    for snr in snr_vals:
+        noise_std = np.linalg.norm(audio_reverb[0])/(10**(snr/20.))
+        final_noise = noise_normalized*noise_std
+        noisy_signal[snr] = audio_reverb[0] + final_noise
+    return noisy_signal
+
+def modify_input_wav_multiple_mics(wav,noise,room_dim,max_order,snr_vals,mic_array,pos_source,pos_noise):
+
+    fs_s, audio_anechoic = wavfile.read(wav)
+    fs_n, noise_anechoic = wavfile.read(noise)
+
+    #Create a room for the signal
+    room_signal= pra.ShoeBox(
+        room_dim,
+        absorption = 0.2,
+        fs = fs_s,
+        max_order = max_order)
+
+    #Create a room for the noise
+    room_noise = pra.ShoeBox(
+        room_dim,
+        absorption=0.2,
+        fs=fs_n,
+        max_order = max_order)
+
+    #source of the signal and of the noise in their respectiv boxes
+    room_signal.add_source(pos_source,signal=audio_anechoic)
+    room_noise.add_source(pos_noise, signal=noise_anechoic)
+
+    #we had the microphones array in both room
+    room_signal.add_microphone_array(pra.MicrophoneArray(mic_array.T,room_signal.fs))
+    room_noise.add_microphone_array(pra.MicrophoneArray(mic_array.T,room_noise.fs))
+
+    #simulate both rooms
+    room_signal.simulate()
+    room_noise.simulate()
+
+    #take the mic_array.signals from each room
+    audio_reverb = room_signal.mic_array.signals
+    noise_reverb = room_noise.mic_array.signals
+
+    shape = np.shape(audio_reverb)
+
+    noise_normalized = np.zeros(shape)
+
+    #for each microphones
+    if(len(noise_reverb[0]) < len(audio_reverb[0])):
+        raise ValueError('the length of the noise signal is inferior to the one of the audio signal !!')
+    noise_reverb = noise_reverb[:,:len(audio_reverb[0])]
+
+    norm_fact = np.linalg.norm(noise_reverb[0])
+    noise_normalized = noise_reverb / norm_fact
+
+    #initilialize the array of noisy_signal
+    noisy_signal = np.zeros([len(snr_vals),shape[0],shape[1]])
+
+    for i,snr in enumerate(snr_vals):
+        noise_std = np.linalg.norm(audio_reverb[0])/(10**(snr/20.))
+        for m in range(shape[0]):
+            
+            final_noise = noise_normalized[m]*noise_std
+            noisy_signal[i][m] = pra.normalize(audio_reverb[m] + final_noise)
+
+    return noisy_signal
+
+def modify_input_wav_beamforming(wav,noise,room_dim,max_order,snr_vals,mic_array,pos_source,pos_noise,N):
+
+    fs_s, audio_anechoic = wavfile.read(wav)
+    fs_n, noise_anechoic = wavfile.read(noise)
+
+    #Create a room for the signal
+    room_signal= pra.ShoeBox(
+        room_dim,
+        absorption = 0.2,
+        fs = fs_s,
+        max_order = max_order)
+
+    #Create a room for the noise
+    room_noise = pra.ShoeBox(
+        room_dim,
+        absorption=0.2,
+        fs=fs_n,
+        max_order = max_order)
+
+    #source of the signal and of the noise in their respectiv boxes
+    room_signal.add_source(pos_source,signal=audio_anechoic)
+    room_noise.add_source(pos_noise, signal=noise_anechoic)
+
+    #add the microphone array
+    mics_signal = pra.Beamformer(mic_array, room_signal.fs,N)
+    mics_noisy = pra.Beamformer(mic_array, room_noise.fs,N)
+    room_signal.add_microphone_array(mics_signal)
+    room_noise.add_microphone_array(mics_noisy)
+
+    #simulate both rooms
+    room_signal.simulate()
+    room_noise.simulate()
+
+    #take the mic_array.signals from each room
+    audio_reverb = room_signal.mic_array.signals
+    noise_reverb = room_noise.mic_array.signals
+
+    #design beamforming filters
+    mics_signal.rake_delay_and_sum_weights(room_signal.sources[0][:1])
+    mics_noisy.rake_delay_and_sum_weights(room_signal.sources[0][:1])
+
+    output_signal = mics_signal.process()
+    output_noise = mics_noisy.process()
+
+    #we're going to normalize the noise
+    size = np.shape(audio_reverb)
+    noise_normalized = np.zeros(size)
+    
+    #for each microphones
+    if(len(noise_reverb[0]) < len(audio_reverb[0])):
+        raise ValueError('the length of the noise signal is inferior to the one of the audio signal !!')
+    output_noise = output_noise[:len(output_signal)]
+
+    norm_fact = np.linalg.norm(noise_reverb[-1])
+    noise_normalized = output_noise / norm_fact
+
+    #initilialize the array of noisy_signal
+    noisy_signal = np.zeros([len(snr_vals),np.shape(output_signal)[0]])
+
+    for i,snr in enumerate(snr_vals):
+        noise_std = np.linalg.norm(audio_reverb[-1])/(10**(snr/20.))
+        final_noise = noise_normalized*noise_std
+        noisy_signal[i] = pra.normalize(pra.highpass(output_signal + final_noise,fs_s))
+
+    return noisy_signal
+
+
+
