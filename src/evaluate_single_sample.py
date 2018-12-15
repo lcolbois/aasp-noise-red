@@ -102,6 +102,8 @@ if __name__ == '__main__':
     fft_len = 400
     # number of bins we're gonna use for our FFT
     n_fft_bins = fft_len//2 + 1
+    # parameter of the noise Update
+    alpha = 0.0
 
     '''
     Selecting words from the dataset as in the example of the GoogleSpeechCommand
@@ -139,26 +141,34 @@ if __name__ == '__main__':
         noisy_signal[i] = sp.data.add_noise_from_file(speech_signal,sr,noise.meta.as_dict()['file_loc'],snr)
 
     processed_signal = np.zeros(noisy_signal.shape)
+    processed_signal_VAD = np.zeros(noisy_signal.shape)
 
     # we run the algorithm for each of our possible signal
     for i in range(len(snr_vals)):
         processed_signal[i] = sp.process.denoise(noisy_signal[i],fft_len,lpc_order,iterations)
+        processed_signal_VAD[i] = sp.process.denoise_with_vad(noisy_signal[i],sr,fft_len,lpc_order,iterations,alpha)
 
     '''
     Write to WAV + labelling of our processed noisy signals
     '''
     # labelling our different single noise channel removed signals and comparing their classification with the one for the original noisy signals
     score_processing = np.zeros(len(snr_vals))
+    score_processing_VAD = np.zeros(len(snr_vals))
     score_original = np.zeros(len(snr_vals))
 
     for i, snr in enumerate(snr_vals):
         print("SNR : %f dB" % snr)
-        dest = os.path.join(dest_dir,"single_noise_channel_signal_snr_db_%d.wav" %(snr))
+        dest = os.path.join(dest_dir,"denoised_snr_db_%d.wav" %(snr))
         signal = pra.normalize(processed_signal[i], bits=16).astype(np.int16)
         wavfile.write(dest,16000,signal)
         score_processing[i] = label_wav(dest, labels_file, graph_file, speech.meta.as_dict()['word'])
 
-        dest = os.path.join(dest_dir,"original_signal_snr_db_%d.wav" %(snr))
+        dest = os.path.join(dest_dir,"denoised_with_VAD_snr_db_%d.wav" %(snr))
+        signal = pra.normalize(processed_signal_VAD[i], bits=16).astype(np.int16)
+        wavfile.write(dest,16000,signal)
+        score_processing_VAD[i] = label_wav(dest, labels_file, graph_file, speech.meta.as_dict()['word'])
+
+        dest = os.path.join(dest_dir,"noisy_snr_db_%d.wav" %(snr))
         signal = pra.normalize(noisy_signal[i], bits=16).astype(np.int16)
         wavfile.write(dest,16000,signal)
         score_original[i] = label_wav(dest, labels_file, graph_file, speech.meta.as_dict()['word'])
@@ -166,8 +176,9 @@ if __name__ == '__main__':
 
 
     # plotting the result
-    plt.plot(snr_vals,score_processing, label="single noise channel removal signal")
-    plt.plot(snr_vals,score_original, label="original")
+    plt.plot(snr_vals,score_original, label="noisy")
+    plt.plot(snr_vals,score_processing, label="denoised")
+    plt.plot(snr_vals,score_processing_VAD,label="VAD + denoised")
     plt.legend()
     plt.title('SNR against percentage of confidence')
     plt.xlabel('SNR in dB')

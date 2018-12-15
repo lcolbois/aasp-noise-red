@@ -100,6 +100,8 @@ if __name__ == '__main__':
     fft_len = 400
     # number of bins we're gonna use for our FFT
     n_fft_bins = fft_len//2 + 1
+    # parameter update of the sigma
+    alpha = 0.05
 
     '''
     Creating the Dataset object with all the value for the desired words
@@ -139,25 +141,30 @@ if __name__ == '__main__':
     # we run the algorithm for all of our signal for all possible SNR values.
     # we create the map that will contain our newly computed signals
     processed_signal = {}
+    processed_signal_VAD = {}
     for s in speech_samps:
     	processed_signal[s] = np.zeros(noisy_signal[s].shape)
+        processed_signal_VAD[s] = np.zeros(noisy_signal[s].shape)
 
 
     for s in speech_samps:
     	print('processing ...')
     	for i, snr in enumerate(snr_vals):
     	    processed_signal[s][i] = sp.process.denoise(noisy_signal[s][i],fft_len,lpc_order,iterations)
+            processed_signal_VAD[s][i] sp.process.denoise_with_vad(noisy_signal[s][i],sr,fft_len,lpc_order,iterations,alpha)
 
     '''
     Write to WAV and labelling of the samples.
     '''
     # creation of the map that are going to contain the score of the labelling function for our samples.
     score_map_processing = {}
+    score_map_processing_VAD = {}
     score_map_original = {}
     # we are setting the values in our maps to 0
     for w in desired_word:
     	score_map_original[w] = np.zeros([sub,len(snr_vals)])
     	score_map_processing[w] = np.zeros([sub,len(snr_vals)])
+        score_map_processing_VAD[w] = np.zeros([sub,len(snr_vals)])
 
     # now we are gonna compute the labelling
     idx = 0
@@ -166,6 +173,8 @@ if __name__ == '__main__':
     		word = s.meta.as_dict()['word']
     		# destination of the processed signal
     		dest_pro = os.path.join(dest_dir,"processed_signal%d%s_snr_db_%d" %(idx,word,snr))
+            # destination of the processed with VAD signal
+            des_pro_vad = os.path.join(dest_dir,"processed_signal_VAD%d%s_snr_db_%d" %(idx,word,snr))
     		# destination of the original siganl
     		dest_ori = os.path.join(dest_dir,"original_signal%d%s_snr_db_%d" %(idx,word,snr))
     		# noisy processed signal
