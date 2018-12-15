@@ -174,5 +174,51 @@ def denoise(y,frame_size,p,iterations):
         else:
             s[idx] = s[idx] + w_s*(np.fft.irfft(wiener_filter*np.fft.rfft(w_a*y_padded[idx])))
 
-    s = s/np.std(s)
+    s = s/np.max(s)
+    return s[:len(y)]
+
+def denoise_with_vad(y,sr,frame_size,p,iterations,alpha):
+    # Get the list of frames for the STFT filtering
+    list_frames,y_padded,w_a,w_s = sp.data.frame_split(y,frame_size,with_overlap=False)
+    n_frames = len(list_frames)
+
+    # Create list of values per frame
+    s = np.zeros(y_padded.shape)
+    sigmas = np.zeros(len(list_frames))
+    is_speech = np.zeros(len(list_frames),dtype=bool)
+    filters = [None]*n_frames
+
+    vad = sp.vad.VAD(N=frame_size,fs = sr, N_fft = frame_size)
+    # Initialize relevant values at frame 0, 1
+    sigmas[0] = np.std(w_a*y_padded[list_frames[0]])
+    is_speech[0] = vad.decision_noise_level(w_a*y_padded[list_frames[0]])
+    filters[0] = np.zeros(int(frame_size//2+1))
+
+
+    for k in range(1,n_frames):
+        idx = list_frames[k]
+        frame = w_a*y_padded[idx]
+        #1. Classify next frame
+        is_speech[k] = vad.decision_noise_level(frame)
+
+        #and (np.sum(frame**2) > frame_size*sigmas[k-1]**2)
+        if(is_speech[k]): # If the frame is assumed to be speech
+            # Update rule for sigma
+
+            sigmas[k] = sigmas[k-1]
+            # Through all pole model, compute a Wiener Filter and denoise the current frame
+            denoised_frame, filters[k] = sp.process.denoise_frame(frame,p,sigmas[k]**2,iterations)
+
+            loc_signal = w_s * denoised_frame
+            s[idx] = s[idx] + loc_signal
+
+        else: # If the frame is assumed to be noise
+            # Evaluate the noise PSD
+            sigma_loc = np.std(frame)
+            sigmas[k] = (1-alpha)*sigmas[k-1]+alpha*sigma_loc
+            filters[k] = filters[k-1]
+
+            s[idx] = s[idx] + w_s*(np.fft.irfft(filters[k]*np.fft.rfft(frame)))
+
+    s = s/np.max(s)
     return s[:len(y)]
