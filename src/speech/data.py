@@ -7,7 +7,7 @@ def load(filename):
         Normalize it and return (signal, sampling rate)
     """
     sr, s = wavfile.read(filename)
-    s = s/np.std(s)
+    s = s/np.max(s)
     return s, sr
 
 def add_white_noise(x,SNR,seed=0):
@@ -18,7 +18,8 @@ def add_white_noise(x,SNR,seed=0):
     Ps=np.sum(x**2)
     noise_variance =  Ps/(10**(SNR/10))
     noise = np.sqrt(noise_variance/len(x))*np.random.randn(len(x))
-    return x+noise
+    noisy = x + noise
+    return noisy/np.max(noisy)
 
 def add_noise_from_file(speech,sr_speech,noise_path,SNR):
     noise_raw,sr_noise = load(noise_path)
@@ -30,7 +31,8 @@ def add_noise_from_file(speech,sr_speech,noise_path,SNR):
     Pn = np.sum(noise**2)
     target_Pn = Ps/(10**(SNR/10))
     noise_corrected = noise*np.sqrt(target_Pn/Pn)
-    return speech + noise_corrected
+    noisy = speech + noise_corrected
+    return noisy/np.max(noisy)
 
 def frame_split(x,frame_size, with_overlap = True):
     """ Takes signal x and split it in frames of size frame_size
