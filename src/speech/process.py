@@ -133,7 +133,7 @@ def denoise_frame(x,p,noise_PSD,iterations):
         filtered_dft,transfer = wiener_filtering(dft,speech_PSD(a,g2,len(dft)),noise_PSD)
         s_i = np.fft.irfft(filtered_dft)
 
-    return s_i, transfer, speech_PSD(a,g2,len(dft)), noise_PSD
+    return s_i, transfer
 
 def lowpass_filter(s,sr,fmax):
     S = np.fft.rfft(s)
@@ -163,12 +163,13 @@ def denoise(y,frame_size,p,iterations):
 
     wiener_filter = np.zeros(int(frame_size//2)+1)
     s = np.zeros(y_padded.shape)
+
     noise_PSD = np.var(w_a*y_padded[:frame_size])
 
     for frame in range(n_frames):
         idx = list_frames[frame]
         if(np.sum((w_a*y_padded[idx])**2) > frame_size*noise_PSD):
-            denoised,wiener_filter,_,_ = sp.process.denoise_frame(w_a*y_padded[idx],p,noise_PSD,iterations)
+            denoised,wiener_filter = sp.process.denoise_frame(w_a*y_padded[idx],p,noise_PSD,iterations)
             s[idx] = s[idx] + w_s*denoised
         else:
             s[idx] = s[idx] + w_s*(np.fft.irfft(wiener_filter*np.fft.rfft(w_a*y_padded[idx])))
