@@ -75,11 +75,11 @@ if __name__ == '__main__':
     User parameter for synthetizing the signal
     '''
     # the SNR values in dB we use to create the different samples
-    snr_vals = np.arange(60,20,-5)
+    snr_vals = np.arange(80,10,-10)
     # desired basis words. Here we have all the possible words in our model
     desired_word = ['yes']
     # subest desired per word
-    sub = 25
+    sub = 1
     #choose your label file
     labels_file = "conv_labels.txt"
     #choose your graph file
@@ -143,15 +143,14 @@ if __name__ == '__main__':
     processed_signal = {}
     processed_signal_VAD = {}
     for s in speech_samps:
-    	processed_signal[s] = np.zeros(noisy_signal[s].shape)
+        processed_signal[s] = np.zeros(noisy_signal[s].shape)
         processed_signal_VAD[s] = np.zeros(noisy_signal[s].shape)
-
 
     for s in speech_samps:
     	print('processing ...')
     	for i, snr in enumerate(snr_vals):
-    	    processed_signal[s][i] = sp.process.denoise(noisy_signal[s][i],fft_len,lpc_order,iterations)
-            processed_signal_VAD[s][i] sp.process.denoise_with_vad(noisy_signal[s][i],sr,fft_len,lpc_order,iterations,alpha)
+            processed_signal[s][i] = sp.process.denoise(noisy_signal[s][i],fft_len,lpc_order,iterations)
+            processed_signal_VAD[s][i],_,_ = sp.process.denoise_with_vad(noisy_signal[s][i],sr,fft_len,lpc_order,iterations,alpha)
 
     '''
     Write to WAV and labelling of the samples.
@@ -162,52 +161,61 @@ if __name__ == '__main__':
     score_map_original = {}
     # we are setting the values in our maps to 0
     for w in desired_word:
-    	score_map_original[w] = np.zeros([sub,len(snr_vals)])
-    	score_map_processing[w] = np.zeros([sub,len(snr_vals)])
+        score_map_original[w] = np.zeros([sub,len(snr_vals)])
+        score_map_processing[w] = np.zeros([sub,len(snr_vals)])
         score_map_processing_VAD[w] = np.zeros([sub,len(snr_vals)])
 
     # now we are gonna compute the labelling
     idx = 0
     for s in speech_samps:
     	for i,snr in enumerate(snr_vals):
-    		word = s.meta.as_dict()['word']
-    		# destination of the processed signal
-    		dest_pro = os.path.join(dest_dir,"processed_signal%d%s_snr_db_%d" %(idx,word,snr))
+            word = s.meta.as_dict()['word']
+            # destination of the processed signal
+            dest_pro = os.path.join(dest_dir,"processed_signal%d%s_snr_db_%d" %(idx,word,snr))
             # destination of the processed with VAD signal
-            des_pro_vad = os.path.join(dest_dir,"processed_signal_VAD%d%s_snr_db_%d" %(idx,word,snr))
-    		# destination of the original siganl
-    		dest_ori = os.path.join(dest_dir,"original_signal%d%s_snr_db_%d" %(idx,word,snr))
-    		# noisy processed signal
-    		noisy_pro = pra.normalize(processed_signal[s][i], bits=16).astype(np.int16)
-    		wavfile.write(dest_pro,16000,noisy_pro)
-    		# noisy original signal
-    		noisy_ori = pra.normalize(noisy_signal[s][i], bits=16).astype(np.int16)
-    		wavfile.write(dest_ori,16000,noisy_ori)
-    		# update the score maps
-    		print("score for processed signal: ")
-    		score_map_processing[word][idx][i] = label_wav(dest_pro, labels_file, graph_file, word)
-    		print()
-    		print("score for original signal: ")
-    		score_map_original[word][idx][i] = label_wav(dest_ori, labels_file, graph_file, word)
-    		print()
-    		idx +=1
-    		if(idx == sub):
-    			idx = 0
+            dest_pro_vad = os.path.join(dest_dir,"processed_signal_VAD%d%s_snr_db_%d" %(idx,word,snr))
+            # destination of the original siganl
+            dest_ori = os.path.join(dest_dir,"original_signal%d%s_snr_db_%d" %(idx,word,snr))
+            # noisy processed signal
+            noisy_pro = pra.normalize(processed_signal[s][i], bits=16).astype(np.int16)
+            wavfile.write(dest_pro,16000,noisy_pro)
+            # noisy VAD+processed signal
+            noisy_pro_vad = pra.normalize(processed_signal_VAD[s][i],bits=16).astype(np.int16)
+            wavfile.write(dest_pro_vad,16000,noisy_pro_vad)
+            # noisy original signal
+            noisy_ori = pra.normalize(noisy_signal[s][i], bits=16).astype(np.int16)
+            wavfile.write(dest_ori,16000,noisy_ori)
+            # update the score maps
+            print("score for original signal: ")
+            score_map_original[word][idx][i] = label_wav(dest_ori, labels_file, graph_file, word)
+            print()
+            print("score for denoised signal: ")
+            score_map_processing[word][idx][i] = label_wav(dest_pro, labels_file, graph_file, word)
+            print()
+            print("score for VAD + denoised signal: ")
+            score_map_processing_VAD[word][idx][i] = label_wav(dest_pro_vad, labels_file, graph_file, word)
+            print()
+            idx +=1
+            if(idx == sub):
+            	idx = 0
 
     # creation of score average map
-    score_map_processing_avg = {}
     score_map_original_avg = {}
+    score_map_processing_avg = {}
+    score_map_processing_VAD_avg = {}
     for w in desired_word:
-    	score_map_original_avg[w] = np.average(score_map_original[w],axis=0)
-    	score_map_processing_avg[w] = np.average(score_map_processing[w], axis=0)
+        score_map_original_avg[w] = np.average(score_map_original[w],axis=0)
+        score_map_processing_avg[w] = np.average(score_map_processing[w], axis=0)
+        score_map_processing_VAD_avg[w] = np.average(score_map_processing_VAD[w],axis=0)
 
     # plotting of the result
     for w in desired_word:
-    	plt.subplot(2,1,1)
-    	plt.plot(snr_vals, score_map_processing_avg[w], label='processed_signal_for_%s' %w)
-    	plt.plot(snr_vals, score_map_original_avg[w], label='original_signal_for_%s' %w)
-    	plt.xlabel('SNR values [dB]')
-    	plt.ylabel('%% confidence')
-    	plt.legend()
+        plt.subplot(2,1,1)
+        plt.plot(snr_vals, score_map_original_avg[w], label='original_signal_for_%s' %w)
+        plt.plot(snr_vals, score_map_processing_avg[w], label='denoised_signal_for_%s' %w)
+        plt.plot(snr_vals, score_map_processing_VAD_avg[w], label='VAD+denoised_signal_for_%s' %w)
+        plt.xlabel('SNR values [dB]')
+        plt.ylabel('%% confidence')
+        plt.legend()
     plt.grid()
     plt.show()

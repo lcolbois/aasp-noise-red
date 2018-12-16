@@ -146,7 +146,7 @@ if __name__ == '__main__':
     # we run the algorithm for each of our possible signal
     for i in range(len(snr_vals)):
         processed_signal[i] = sp.process.denoise(noisy_signal[i],fft_len,lpc_order,iterations)
-        processed_signal_VAD[i] = sp.process.denoise_with_vad(noisy_signal[i],sr,fft_len,lpc_order,iterations,alpha)
+        processed_signal_VAD[i],_,_ = sp.process.denoise_with_vad(noisy_signal[i],sr,fft_len,lpc_order,iterations,alpha)
 
     '''
     Write to WAV + labelling of our processed noisy signals
