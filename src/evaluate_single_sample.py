@@ -1,9 +1,12 @@
-'''
-Example of how to use single_noise_channel removal algorithm. In this example we also use what we have seen in other examples:
-We're gonna synthetize a signal, Then we're gonna do processing on it using the algorithm and finally we are going to label
-the newly obtained file and compare them to the file without any processing.
+''' The overall code structure as well as the pretrained model were taken from
+A. Mermet, E. Bezzam, R. Scheibler, "Augmenting 'pyroomacoustics' with machine learning utilies", LCAV, EPFL, https://infoscience.epfl.ch/record/255834, 2018
 '''
 
+'''
+Example of how to use the denoising algorithm. In this example we also use what we have seen in other examples:
+We're gonna add noise to a signal, Then we're gonna do denoise it using the algorithm and finally we are going to label
+the newly obtained file and compare them to the file without any denoising.
+'''
 
 import numpy as np
 from scipy.io import wavfile

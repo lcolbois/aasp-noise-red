@@ -1,8 +1,6 @@
+''' The overall code structure as well as the pretrained model were taken from
+A. Mermet, E. Bezzam, R. Scheibler, "Augmenting 'pyroomacoustics' with machine learning utilies", LCAV, EPFL, https://infoscience.epfl.ch/record/255834, 2018
 '''
-example showing the improvement of single_noise_channel_removal on the full GoogleSpeechCommand
-Dataset.
-'''
-
 import numpy as np
 from scipy.io import wavfile
 import utils
