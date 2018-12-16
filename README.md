@@ -4,9 +4,9 @@
 
 
 ## Prerequisites
-numpy 1.13.3
-pyroomacoustics 0.1.20
-tensorflow 1.12.0
+- numpy 1.13.3
+- pyroomacoustics 0.1.20
+- tensorflow 1.12.0
 
 ### Report in Notebook format : see src/Report.ipynb
 
