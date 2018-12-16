@@ -75,11 +75,11 @@ if __name__ == '__main__':
     User parameter for synthetizing the signal
     '''
     # the SNR values in dB we use to create the different samples
-    snr_vals = np.arange(80,10,-10)
+    snr_vals = np.arange(50,0,-5)
     # desired basis words. Here we have all the possible words in our model
-    desired_word = ['yes']
+    desired_word = ['no']
     # subest desired per word
-    sub = 1
+    sub = 10
     #choose your label file
     labels_file = "conv_labels.txt"
     #choose your graph file
@@ -95,7 +95,7 @@ if __name__ == '__main__':
     # the number of LPC coefficents to consider
     lpc_order = 10
     # the number of iterations to compute the Wiener filter
-    iterations = 10
+    iterations = 5
     # the lenght of our FFT
     fft_len = 400
     # number of bins we're gonna use for our FFT
