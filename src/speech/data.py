@@ -10,6 +10,9 @@ def load(filename):
     s = s/np.max(s)
     return s, sr
 
+def write(s,sr,filename):
+    wavfile.write(filename,sr,s)
+
 def add_white_noise(x,SNR,seed=0):
     """ Takes signal x and add white Gaussian noise to it to reach
         target SNR (in dB)
