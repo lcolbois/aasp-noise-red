@@ -161,7 +161,7 @@ def denoise(y,frame_size,p,iterations):
     list_frames,y_padded,w_a,w_s = sp.data.frame_split(y,frame_size)
     n_frames = len(list_frames)
 
-    wiener_filter = np.zeros(int(frame_size//2)+1)
+    wiener_filter = np.ones(int(frame_size//2)+1)
     s = np.zeros(y_padded.shape)
 
     noise_PSD = np.var(w_a*y_padded[:frame_size])
@@ -190,9 +190,11 @@ def denoise_with_vad(y,sr,frame_size,p,iterations,alpha):
 
     vad = sp.vad.VAD(N=frame_size,fs = sr, N_fft = frame_size)
     # Initialize relevant values at frame 0, 1
-    sigmas[0] = np.std(w_a*y_padded[list_frames[0]])
-    is_speech[0] = vad.decision_noise_level(w_a*y_padded[list_frames[0]])
-    filters[0] = np.zeros(int(frame_size//2+1))
+    init_frame = w_a*y_padded[list_frames[0]]
+    sigmas[0] = np.std(init_frame)
+    is_speech[0] = vad.decision_noise_level(init_frame)
+    filters[0] = np.ones(int(frame_size//2+1))
+    s[list_frames[0]] = s[list_frames[0]]+ w_s*init_frame
 
 
     for k in range(1,n_frames):
@@ -201,8 +203,7 @@ def denoise_with_vad(y,sr,frame_size,p,iterations,alpha):
         #1. Classify next frame
         is_speech[k] = vad.decision_noise_level(frame)
 
-        #and (np.sum(frame**2) > frame_size*sigmas[k-1]**2)
-        if(is_speech[k]): # If the frame is assumed to be speech
+        if(is_speech[k] and (np.sum(frame**2) > frame_size*sigmas[k-1]**2)): # If the frame is assumed to be speech
             # Update rule for sigma
 
             sigmas[k] = sigmas[k-1]
@@ -221,4 +222,4 @@ def denoise_with_vad(y,sr,frame_size,p,iterations,alpha):
             s[idx] = s[idx] + w_s*(np.fft.irfft(filters[k]*np.fft.rfft(frame)))
 
     s = s/np.max(s)
-    return s[:len(y)]
+    return s[:len(y)], is_speech, sigmas
