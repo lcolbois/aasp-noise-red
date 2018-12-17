@@ -1,0 +1,32 @@
+blockdiag {
+  default_fontsize = 16
+  node_height = 80	
+  noisy [label = "Frame : 
+y = s + n"];
+
+  vad [label = "Voice Activity 
+Detection"];
+  speech_PSD [label = "Speech frame : 
+s_0 = y"];
+  noise_PSD [label = "Noise frame : 
+PSD Estim."];
+  
+group {
+  label = "Iterative Wiener Filtering"
+  lpc [label = "LPC analysis : 
+PSD Estim."];
+  wiener [label = "Wiener Filtering"]
+  update [label = "Estimation s_i"]
+  }
+
+  noisy -> vad -> speech_PSD, noise_PSD;
+
+  speech_PSD -> lpc -> wiener -> update -> lpc
+  noise_PSD -> wiener
+
+
+  
+  #noise_PSD -> wiener;
+  #lpc -> wiener -> update -> lpc;
+
+}
