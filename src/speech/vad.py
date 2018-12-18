@@ -5,6 +5,7 @@ import scipy.signal as signal
 from scipy.fftpack import fft, ifft
 import math
 
+# Inspired from https://github.com/LCAV/easy-dsp/blob/master/algorithms/vad.py
 class VAD(object):
 
     """
